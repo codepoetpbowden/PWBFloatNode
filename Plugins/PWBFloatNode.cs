@@ -6,6 +6,34 @@ namespace PWBFloatNode
 {
     public class PWBFloatNode : PartModule
     {
+        private struct TopBottomRadiusAndNode
+        {
+            float r;
+            int nS;
+
+            public TopBottomRadiusAndNode(float _radius, int _nodeSize)
+            {
+                r = _radius;
+                nS = _nodeSize;
+            }
+
+            public float radius
+            {
+                get
+                {
+                    return r;
+                }
+            }
+            public int nodeSize
+            {
+                get
+                {
+                    return nS;
+                }
+            }
+
+        }
+
         private struct NodeRing
         {
             public NodeRing(int _count, float _radius)
@@ -63,12 +91,17 @@ namespace PWBFloatNode
 
         [KSPField]
         public string floatNodeKey = "f";
-
         [KSPField]
         public string nodePatternKey = "p";
+        [KSPField]
+        public string topNodeSizeKey = "t";
+
 
         [KSPField(isPersistant = true)]
         public int nodePattern = -1; // Note that the value -1 is a special case. In this case the maximum number of attachment nodes will be created, but be placed so far away as to be unusable. They need to be present so they can be used by the loading code.
+
+        [KSPField(isPersistant = true)]
+        public int topTBNR = 1; 
 
         private List<NodePattern> nodePatternList; // list of procedurally created AttachNodes
 
@@ -76,6 +109,8 @@ namespace PWBFloatNode
 
         private String nodeIDRoot = "PWBProcNode";
         private int maxProceduralNodes = 20; // THis needs to be the largest number of procedural nodes that are possible.
+
+        private List<TopBottomRadiusAndNode> tbrnList;
 
         private double plateHeight = 0.1; // This is the distance between the top of the plate (that fits on the bottom of a fuel tank, and the bottom of a plate (that the engines attach to.) 
 
@@ -94,6 +129,23 @@ namespace PWBFloatNode
             // Build the list of possible node patterns
             BuildNodePatternList();
             this.tempIcons = new List<TempNodeIcon>();
+
+            // Set the current node pattern to be -1 which will cause dummy nodes to be created which are required for the loading code. The node pattern will be changed to something else on load.
+            this.nodePattern = -1;
+
+            // Build a list of possible top/bottom sizes
+            this.tbrnList = new List<TopBottomRadiusAndNode>();
+            this.tbrnList.Add(new TopBottomRadiusAndNode (0.25f, 0));
+            this.tbrnList.Add(new TopBottomRadiusAndNode(0.5f, 1));
+            this.tbrnList.Add(new TopBottomRadiusAndNode(1.0f, 2));
+            this.tbrnList.Add(new TopBottomRadiusAndNode(1.5f, 2));
+            this.tbrnList.Add(new TopBottomRadiusAndNode(2.0f, 2));
+
+            // Create dummy nodes
+            this.CreateProceduralNodes();
+
+            // TODO remove debugging
+            this.LogAttachmentNodesData("OnAwake}");
         }
 
         /// <summary>
@@ -159,7 +211,7 @@ namespace PWBFloatNode
                 Debug.Log("OnLoad()");
                 Debug.Log(TraceConfigNode(node));
 
-                this.BuildMountingPlateMesh(1.25);// TODO the pararmeter passed in here represents the radius of the top of the baseplate
+                this.BuildMountingPlateMesh();
 
                 // Now we need to recreate the pattern of procedural attachement nodes based on the config.
                 this.CreateProceduralNodes();
@@ -214,6 +266,10 @@ namespace PWBFloatNode
                     {
                         OnNodePatternKey();
                     }
+                    else if (Input.GetKey(topNodeSizeKey))
+                    {
+                        OnTopNodeSizeKey();
+                    }
 
                 }
             }
@@ -240,7 +296,7 @@ namespace PWBFloatNode
 
             // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
             // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
-            BuildMountingPlateMesh(1.25);// TODO the pararmeter passed in here represents the radius of the top of the baseplate
+            BuildMountingPlateMesh();
 
             // Add new procedural nodes in a new pattern or move existing ones
             CreateProceduralNodes();
@@ -251,6 +307,34 @@ namespace PWBFloatNode
          
             // Debug.Log("OnNodePatternKey}");
         }
+
+        private void OnTopNodeSizeKey()
+        {
+            if (HasProceduralAttachments(this.part))
+            {
+                // Display a message to let the user know that they can't change the node pattern while things are attached.
+                osd.Error("Can't change the size of the mounting plate while parts are connected");
+                return;
+            }
+
+            // Change the TBNR
+            this.topTBNR = (this.topTBNR + 1) % this.tbrnList.Count;
+
+            // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
+            // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
+            BuildMountingPlateMesh();
+
+            // Add new procedural nodes in a new pattern or move existing ones
+            CreateProceduralNodes();
+
+            // Create the icons that display the positions of the procedural attachment nodes.
+            CreateTempNodeIcons();
+
+        }
+
+
+
+
 
         private void CreateTempNodeIcons()
         {
@@ -337,6 +421,7 @@ namespace PWBFloatNode
             newList.Add(CopyNode(this.part.attachNodes.Find(an => an.id == "bottom")));
 
             // If the node pattern is -1 then we create the maximum number of nodes but place them so far away that they can not be used. This should only happen for the prefab. Once the user start selecting a node pattern, then they should become sensible.
+            Debug.Log("this.nodePattern" + this.nodePattern);
             if (-1 == this.nodePattern)
             {
                 for(int i=0;i<this.maxProceduralNodes;i++)
@@ -377,9 +462,11 @@ namespace PWBFloatNode
             LogAttachmentNodesData("CreateProceduralNodes2");
         }
 
+    
+
         private AttachNode CreateProceduralNode(float x, float z, int size, int seqNum)
         {
-            // Debug.Log("CreateProceduralNode { x:" + x + " z:" + z +" size:"+size + " seqNum:"+seqNum);
+            Debug.Log("CreateProceduralNode { x:" + x + " z:" + z +" size:"+size + " seqNum:"+seqNum);
 
             String nodeID = this.nodeIDRoot + seqNum.ToString();
             AttachNode newNode = null; // This will either be a copy of an existing node at that seqNum, or a new creation. TODO would it not be better just to create it afresh each time?
@@ -390,7 +477,6 @@ namespace PWBFloatNode
             // If we did not find a ProceduralNode with this SeqNum then create it
             if (null == attachNode)
             {
-                // Debug.Log("Adding node: " + nodeID);
                 newNode = new AttachNode();
             }
             else
@@ -399,9 +485,8 @@ namespace PWBFloatNode
             }
 
             newNode.position = new Vector3(x, (float)-this.plateHeight, z);
-            newNode.position *= this.part.scaleFactor;
+            newNode.position = newNode.position * (part.rescaleFactor * part.scaleFactor);
             newNode.orientation = new Vector3(0, -1, 0);
-            newNode.orientation *= this.part.scaleFactor;
             newNode.originalPosition = newNode.position;
             newNode.originalOrientation = newNode.orientation;
             newNode.size = size;
@@ -713,42 +798,56 @@ namespace PWBFloatNode
             // Empty
             {
                 NodePattern np = new NodePattern();
-                np.Add(0, 0, 0, 0.625f,1);
+                np.Add(0, 0, 0, 0.5f,1);
                 this.nodePatternList.Add(np);
             }
 
             // One in the middle
             {
                 NodePattern np = new NodePattern();
-                np.Add(1, 0, 0, 0.625f, 1);
+                np.Add(1, 0, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Two on either side
             {
                 NodePattern np = new NodePattern();
-                np.Add(2, 0.625f, 0, 0.625f, 1);
+                np.Add(2, 0.5f, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 3
             {
                 NodePattern np = new NodePattern();
-                np.Add(3, 0.625f, 0, 0.625f, 1);
+                np.Add(3, 0.5f, 0, 0.5f, 1);
+                this.nodePatternList.Add(np);
+            }
+
+            // Ring of 3 (tight fitting)
+            {
+                NodePattern np = new NodePattern();
+                np.Add(3, 0.577f, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 4
             {
                 NodePattern np = new NodePattern();
-                np.Add(4, 0.625f, 0, 0.625f, 1);
+                np.Add(4, 0.5f, 0, 0.5f, 1);
+                this.nodePatternList.Add(np);
+            }
+
+            // Ring of 4 (Tight fitting)
+            {
+                NodePattern np = new NodePattern();
+                np.Add(4, 0.785f, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 4 offset by 45 degrees
             {
                 NodePattern np = new NodePattern();
-                np.Add(4, 0.625f, 45, 0.625f, 1);
+                np.Add(4, 0.5f, 45, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
@@ -756,29 +855,45 @@ namespace PWBFloatNode
             // Ring of 6
             {
                 NodePattern np = new NodePattern();
-                np.Add(6, 0.625f, 0, 0.625f, 1);
+                np.Add(6, 0.5f, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 6 and one in the middle
             {
                 NodePattern np = new NodePattern();
-                np.Add(6, 0.625f, 0, 0.625f, 1);
-                np.Add(1, 0, 0,0.625f, 1);
+                np.Add(6, 0.5f, 0, 0.5f, 1);
+                np.Add(1, 0, 0,0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 2 in the edge of a large (2.5m) tank
             {
                 NodePattern np = new NodePattern();
-                np.Add(2, 1.25f, 0, 0.625f, 1);
+                np.Add(2, 1.0f, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
             // Ring of 2 in the edge of a large (2.5m) tank, rotated 90 degrees
             {
                 NodePattern np = new NodePattern();
-                np.Add(2, 1.25f, 90, 0.625f, 1);
+                np.Add(2, 1.0f, 90, 0.5f, 1);
+                this.nodePatternList.Add(np);
+            }
+
+            // Ring of 4 and one in the middle
+            {
+                NodePattern np = new NodePattern();
+                np.Add(4, 1.0f, 0, 0.5f, 1);
+                np.Add(1, 0, 0, 0.5f, 1);
+                this.nodePatternList.Add(np);
+            }
+
+            // Ring of 6 and one in the middle
+            {
+                NodePattern np = new NodePattern();
+                np.Add(6, 1.0f, 0, 0.5f, 1);
+                np.Add(1, 0, 0, 0.5f, 1);
                 this.nodePatternList.Add(np);
             }
 
@@ -822,15 +937,23 @@ namespace PWBFloatNode
             Debug.Log(logData);
         }
 
-        private void BuildMountingPlateMesh(double radius) // Radius is the radius of the main body of the part. This should be know to the class, and not need to passed in as a parameter. TODO
+        private void BuildMountingPlateMesh()
         {
-            MeshFilter mf = part.FindModelComponent<MeshFilter>("baseplate2.5m");
+            // TODO remove debugging
+            // Debug.Log("scaleFactor:" + part.scaleFactor + " RescaleFactor:" + part.rescaleFactor);
+
+            // First do soem sanity checking
+            if (this.nodePattern < 0) { this.nodePattern = 0; } // This might occur if the user changes the top size before choosing a node pattern.
+
+            double radius = this.tbrnList[this.topTBNR].radius;
+
+            MeshFilter mf = part.FindModelComponent<MeshFilter>("PWBProceduralEngineHousing");
             if (!mf) { Debug.LogError("[PWB FloatNode] no model for the engine mounting1", part); return; }
 
             // Sort out the rotations and position so that the mesh matches the part.
             mf.transform.position = part.transform.position;
             mf.transform.rotation = part.transform.rotation;
-            
+
             Mesh m = mf.mesh;
             if (!m) { Debug.LogError("[PWB FloatNode] no model for the engine mounting2", part); return; }
 
@@ -838,7 +961,7 @@ namespace PWBFloatNode
 
             int sides = 60; // TODO we need to be MUCH smarter about this!
             double maxCrossSectionRadius = radius;
-            double minHeight = 0.1; // TODO change this back to a sensible value, such as 0.1
+            double minHeight = 0.1; 
             int totalTriangles = sides * 4;
 
             double[] shape = new double[sides]; // an array of values representing the radius at the various vertices at the base of the model.
@@ -849,6 +972,7 @@ namespace PWBFloatNode
             Vector3[] normals = new Vector3[(4 * sides) + 2]; // Arrary for the normal at each vertex
             Color32[] vertexColors = new Color32[(4 * sides) + 2];
             int[] trianges = new int[totalTriangles * 3]; // Array that describes the which vertices make up each triangle.
+            Vector2[] uvs = new Vector2[(4 * sides) + 2]; // Marks locations in the uv texture map to particular verticies
 
             // First locate all the vertices.
             {
@@ -868,7 +992,7 @@ namespace PWBFloatNode
                             double ringAngle = (Math.PI * 2 * ((double)counter2 / (double)ring.nodeCount)) + (double)ring.offsetAngle;
                             double theta = crossSectionAngle - ringAngle;
                             Debug.Log("theta:" + theta);
-                            double result = GetMaxDistanceFromPlateCentre(theta, ring.radius, ring.nodeRadius);
+                            double result = GetMaxDistanceFromPlateCentre(theta, ring.radius , ring.nodeRadius );
                             if (!double.IsNaN(result))
                             {
                                 if (result > crossSectionRadius)
@@ -897,6 +1021,7 @@ namespace PWBFloatNode
                 for (int counter = 0; counter < sides; counter++)
                 {
                     shapeNormals[counter].y = (float)(((shape[counter] - radius) * (shape[counter] - radius)) / plateHeight);
+                    shapeNormals[counter].Normalize();
                 }
 
                 // TODO remove debugging
@@ -906,9 +1031,10 @@ namespace PWBFloatNode
                 // The central vertex in the center of the plate
                 vertices[currentVertex] = Vector3d.zero;
                 normals[currentVertex] = Vector3.up;
-                vertexColors[currentVertex] = Color.gray;
+                //vertexColors[currentVertex] = Color.gray;
+                uvs[currentVertex]= new Vector2(0.25f,0.75f);
                 currentVertex++;
-
+                
                 // the ring of outside vertices at the top.
                 // TODO debug remove
                 Debug.Log("setting out the top ring of vertices");
@@ -919,12 +1045,16 @@ namespace PWBFloatNode
                     vertices[currentVertex].x = (float)(Math.Sin(angle) * radius);
                     vertices[currentVertex].z = (float)(Math.Cos(angle) * radius);
                     normals[currentVertex] = Vector3.up; // for the top outside ring that is part of the top face, the normal points up.
-                    vertexColors[currentVertex] = Color.blue;
+                    //vertexColors[currentVertex] = Color.blue;
+                    uvs[currentVertex] = new Vector2(0.25f + (float)(Math.Sin(angle) * 0.2), 0.75f + (float)(Math.Cos(angle) * 0.2));
 
                     // Make a copy of the top outside ring. These will be used as the top vertices for the side pieces.They are in the same place by will have different normals so that we can create a clean, square edge around the top.
                     vertices[currentVertex + sides] = vertices[currentVertex];
-                    normals[currentVertex + sides] = shapeNormals[counter1]; // for the same top outside vertex that is part of a side face the normal is the one that was precalculated along with the shape of the baseplate.
-                    vertexColors[currentVertex + sides] = Color.white;
+                    normals[currentVertex + sides].x = (float)Math.Sin(angle);  // The normal for the top edge is assuming that the shape isa cylynder at that point.
+                    normals[currentVertex + sides].y = 0;
+                    normals[currentVertex + sides].x = (float)Math.Cos(angle);
+                    //vertexColors[currentVertex + sides] = Color.white;
+                    uvs[currentVertex + sides] = new Vector2(0.05f + ((0.9f * (float)counter1) / (float)sides), 0.45f);
                     currentVertex++;
                 }
 
@@ -942,21 +1072,26 @@ namespace PWBFloatNode
                     vertices[currentVertex].x = (float)(Math.Sin(angle) * shape[counter1]);
                     vertices[currentVertex].z = (float)(Math.Cos(angle) * shape[counter1]);
                     normals[currentVertex] = shapeNormals[counter1]; // for the top bottom vertex that is part of a side face the normal is the one that was precalculated along with the shape of the baseplate.
-                    vertexColors[currentVertex] = Color.grey;
+                    //vertexColors[currentVertex] = Color.grey;
+                    uvs[currentVertex] = new Vector2(0.05f + ((0.9f * (float)counter1) / (float)sides), 0.05f);
 
                     // Make a copy of the bottom outside ring. These will be used as the outside vertices for the bottom pieces.They are in the same place but will have different normals so that we can create a clean, square edge around the bottom.
                     vertices[currentVertex + sides] = vertices[currentVertex];
                     normals[currentVertex + sides] = Vector3.down; //  the normal for the bottom outside ring that is part ofthe bottom plate is down.
-                    vertexColors[currentVertex + sides] = Color.green;
+                    //vertexColors[currentVertex + sides] = Color.green;
+                    uvs[currentVertex + sides] = new Vector2(0.75f + (float)(Math.Sin(angle) * 0.2),0.75f + (float)(Math.Cos(angle) * 0.2));
+
                     currentVertex++;
                 }
+
 
                 // Set up the botom centre vertex.
                 vertices[currentVertex + sides].x = 0;
                 vertices[currentVertex + sides].y = (float)-plateHeight;
                 vertices[currentVertex + sides].z = 0;
                 normals[currentVertex + sides] = Vector3.down; // the normal for the centre bottom vertex is down.
-                vertexColors[currentVertex + sides] = Color.grey;
+                //vertexColors[currentVertex + sides] = Color.grey;
+                uvs[currentVertex + sides] = new Vector2( 0.75f,0.75f);
             }
 
             // Now allocate the triangles
@@ -969,15 +1104,15 @@ namespace PWBFloatNode
                 {
                     trianges[counter1 * 3] = 0;                 // top vertex for a triange on the top
                     trianges[(counter1 * 3) + 1] = counter1 + 1;  // Top outside vertex for a triangle on the top
-                    trianges[(counter1 * 3) + 2] = ((counter1 + 1)%sides)  +1;  // another top outside vertext for a triange on the top.
+                    trianges[(counter1 * 3) + 2] = ((counter1 + 1) % sides) + 1;  // another top outside vertext for a triange on the top.
 
                     trianges[(sides * 3) + (counter1 * 3)] = (sides + 1) + counter1; // top outside vertext for a triangle on the side
                     trianges[(sides * 3) + (counter1 * 3) + 1] = ((2 * sides) + 1) + counter1; // Bottom outside vertext for a triangle on the side
-                    trianges[(sides * 3) + (counter1 * 3) + 2] = (sides + 1) + ((counter1 + 1)%sides); // Next top outside vertext for a triangle on the side
+                    trianges[(sides * 3) + (counter1 * 3) + 2] = (sides + 1) + ((counter1 + 1) % sides); // Next top outside vertext for a triangle on the side
 
-                    trianges[(sides * 6) + (counter1 * 3)] = (sides + 1) + ((counter1 + 1)%sides); // Next top outside vertext for a different triangle on the side
+                    trianges[(sides * 6) + (counter1 * 3)] = (sides + 1) + ((counter1 + 1) % sides); // Next top outside vertext for a different triangle on the side
                     trianges[(sides * 6) + (counter1 * 3) + 1] = ((2 * sides) + 1) + counter1; // Bottom outside vertext for a differnt triangle on the side
-                    trianges[(sides * 6) + (counter1 * 3) + 2] = ((2 * sides) + 1) + ((counter1 + 1)%sides); // Next Bottom outside vertext for a differnt triangle on the side
+                    trianges[(sides * 6) + (counter1 * 3) + 2] = ((2 * sides) + 1) + ((counter1 + 1) % sides); // Next Bottom outside vertext for a differnt triangle on the side
 
                     trianges[(sides * 9) + (counter1 * 3)] = ((3 * sides) + 1) + counter1; // Bottom outside vertext for a triangle on the bottom
                     trianges[(sides * 9) + (counter1 * 3) + 1] = ((4 * sides) + 1); // Bottom centre vertext for triangle on the bottom
@@ -990,11 +1125,33 @@ namespace PWBFloatNode
                 m.Clear();
                 m.vertices = vertices;
                 m.triangles = trianges;
-                //m.uv = null;
+                m.uv = uvs;
+                m.normals = normals;
+                m.RecalculateNormals();
+                
                 //m.uv1 = null;
                 //m.uv2 = null;
-                m.colors32 = vertexColors;
-                if (!HighLogic.LoadedSceneIsEditor) m.Optimize();
+                //m.colors32 = vertexColors;
+
+
+                // TODO is it a good idea optimize in the editor - does it cause a performance problem?
+                //if (!HighLogic.LoadedSceneIsEditor) m.Optimize();
+                //m.Optimize();
+            }
+
+            // Finally set the collider mesh to use this new mesh
+            {
+                MeshCollider mc = part.collider as MeshCollider;
+
+                if (null == mc)
+                {
+                    Debug.LogError("Failed to access the mesh collider");
+                }
+                else
+                {
+                    mc.sharedMesh = null;
+                    mc.sharedMesh = m;
+                }
             }
         }
 
