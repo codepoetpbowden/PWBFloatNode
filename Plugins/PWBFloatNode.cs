@@ -368,6 +368,271 @@ namespace PWBFloatNode
             }
         }
 
+        // A class to hold all the vertices in a fairing that can have a variable number of vertical slices.
+        // TODO rewrite this class.
+        private class FairingBuilder
+        {
+            public Vector3[] vertices;
+            public Vector2[] uv;
+            private int sides;
+            private int levels;
+            private int insideTopStartIdx;
+            private int insideLvlStartIdx;
+            private int insideBottomStartIdx;
+            private int outsideTopStartIdx;
+            private int outsideLvlStartIdx;
+            private int outsideBottomStartIdx;
+            private int verticesInLevel;
+
+            public FairingBuilder(int _sides, int _levels)
+            {
+                this.sides = _sides;
+                this.levels = _levels;
+
+                this.verticesInLevel = this.sides+1;
+
+                int verticesInInside = verticesInLevel * (levels + 2);
+                int verticesInOutside = verticesInLevel * (levels + 2);
+                int vertexCount = verticesInInside + verticesInOutside;
+
+                Debug.Log("Allocating space for " + vertexCount + " vertices.");
+
+                vertices = new Vector3[vertexCount];
+                uv = new Vector2[vertexCount];
+
+                this.insideTopStartIdx = 0;
+                this.insideLvlStartIdx = this.insideTopStartIdx+ verticesInLevel;
+                this.insideBottomStartIdx = this.insideLvlStartIdx+ (verticesInLevel*this.levels);
+
+                this.outsideTopStartIdx = verticesInInside;
+                this.outsideLvlStartIdx = this.outsideTopStartIdx+ verticesInLevel;
+                this.outsideBottomStartIdx = this.outsideLvlStartIdx+ (verticesInLevel*this.levels);
+
+                Debug.Log("insideTopStartIdx:" + insideTopStartIdx + "insideLvlStartIdx:" + insideLvlStartIdx + "insideBottomStartIdx:" + insideBottomStartIdx + "outsideTopStartIdx:" + outsideTopStartIdx + "outsideLvlStartIdx:" + outsideLvlStartIdx + "outsideBottomStartIdx:" + outsideBottomStartIdx);
+            }
+
+            public int GetInsideTopIdx(int s)
+            {
+                return (insideTopStartIdx+s);
+            }
+
+            public int GetInsideBottomIdx(int s)
+            {
+                return (insideBottomStartIdx+s);
+            }
+
+            public int GetInsideLevelIdx(int s, int l)
+            {
+                return (insideLvlStartIdx + (l*this.verticesInLevel) +s);
+            }
+
+            public int GetOutsideTopIdx(int s)
+            {
+                return (outsideTopStartIdx + s);
+            }
+
+            public int GetOutsideBottomIdx(int s)
+            {
+                return (outsideBottomStartIdx + s);
+            }
+
+            public int GetOutsideLevelIdx(int s, int l)
+            {
+                return (outsideLvlStartIdx + (l * this.verticesInLevel) +s);
+            }
+
+            public Vector3 SetInsideTop(int s, Vector3 value, Vector2 uv)
+            {
+                int index = GetInsideTopIdx(s);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+            public Vector3 SetInsideBottom(int s, Vector3 value, Vector2 uv)
+            {
+                int index = GetInsideBottomIdx(s);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+            public Vector3 SetInsideLevel(int s, int l, Vector3 value, Vector2 uv)
+            {
+                int index = GetInsideLevelIdx(s,l);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+
+            public Vector3 SetOutsideTop(int s, Vector3 value, Vector2 uv)
+            {
+                int index = GetOutsideTopIdx(s);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+            public Vector3 SetOutsideBottom(int s, Vector3 value, Vector2 uv)
+            {
+                int index = GetOutsideBottomIdx(s);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+            public Vector3 SetOutsideLevel(int s, int l, Vector3 value, Vector2 uv)
+            {
+                int index = GetOutsideLevelIdx(s, l);
+                this.vertices[index] = value;
+                this.uv[index] = uv;
+                return (value);
+            }
+
+            public int[] triangles
+            {
+                get
+                {
+                    int counter1 = 0;
+
+                    int trianglesInInside = ((this.levels + 1) * 2) * this.sides;
+                    int trianglesInOutside = ((this.levels + 1) * 2) * this.sides;
+                    int totalTriangles = trianglesInInside + trianglesInOutside;
+
+                    Debug.Log("Triangles in inside: " + trianglesInInside + " Triangles in outside: " + trianglesInOutside);
+                    Debug.Log("Allocating storage space for " + totalTriangles + " triangles.");
+
+                    int[] triangles = new int[3 * totalTriangles]; // TODO this does not take into account that we need 2 triangles for each level
+
+                    /*
+                    Debug.Log("Setting triangles for the Inside Top. counter1:" + counter1);
+                    // Set up the triangles in the inside Top.
+                    for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                    {
+                        triangles[counter1] = this.GetInsideTopIdx(sideCounter);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideTopIdx(sideCounter + 1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter, 0);
+                        counter1++;
+
+                        triangles[counter1] = this.GetInsideTopIdx(sideCounter + 1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1,0);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter, 0);
+                        counter1++;
+                    }
+
+                    Debug.Log("Setting triangles for the Inside sides. counter1:" + counter1);
+                    // Now loop through all of the levels (execpt for the final level setting up two sets of triangles between that level and the level below it.
+                    for (int levelCounter = 0; levelCounter < this.levels - 1; levelCounter++)
+                    {
+                        for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                        {
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter, levelCounter);
+                            counter1++;
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter, levelCounter + 1);
+                            counter1++;
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1, levelCounter);
+                            counter1++;
+
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1, levelCounter);
+                            counter1++;
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter, levelCounter + 1);
+                            counter1++;
+                            triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1, levelCounter + 1);
+                            counter1++;
+                        }
+                    }
+
+                    Debug.Log("Setting triangles for the Inside Bottom. counter1:" + counter1);
+                    // Set up the triangles in the inside Bottom.
+                    for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                    {
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter,this.levels-1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1, this.levels - 1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideBottomIdx(sideCounter);
+                        counter1++;
+
+                        triangles[counter1] = this.GetInsideLevelIdx(sideCounter + 1, this.levels - 1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideBottomIdx(sideCounter+1);
+                        counter1++;
+                        triangles[counter1] = this.GetInsideBottomIdx(sideCounter);
+                        counter1++;
+                    }
+                    
+
+                    Debug.Log("Setting triangles for the Outside Top. counter1:" + counter1);
+                    // Set up the triangles in the outside Top.
+                    for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                    {
+                        triangles[counter1] = this.GetOutsideTopIdx(sideCounter);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideTopIdx(sideCounter + 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, 0);
+                        counter1++;
+
+                        triangles[counter1] = this.GetOutsideTopIdx(sideCounter + 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, 0);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, 0);
+                        counter1++;
+                    }
+                    */
+                    Debug.Log("Setting triangles for the Outside sides. counter1:" + counter1);
+                    // Now loop through all of the levels (execpt for the final level setting up two sets of triangles between that level and the level below it.
+                    for (int levelCounter = 0; levelCounter < this.levels - 1; levelCounter++)
+                    {
+                        for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                        {
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, levelCounter);
+                            counter1++;
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, levelCounter);
+                            counter1++;
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, levelCounter + 1);
+                            counter1++;
+
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, levelCounter);
+                            counter1++;
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, levelCounter + 1);
+                            counter1++;
+                            triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, levelCounter + 1);
+                            counter1++;
+                        }
+                    }
+                    /*
+                    Debug.Log("Setting triangles for the Outside Bottom. counter1:" + counter1);
+                    // Set up the triangles in the outside Bottom.
+                    for (int sideCounter = 0; sideCounter < this.sides; sideCounter++)
+                    {
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter, this.levels - 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, this.levels - 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideBottomIdx(sideCounter);
+                        counter1++;
+
+                        triangles[counter1] = this.GetOutsideLevelIdx(sideCounter + 1, this.levels - 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideBottomIdx(sideCounter + 1);
+                        counter1++;
+                        triangles[counter1] = this.GetOutsideBottomIdx(sideCounter);
+                        counter1++;
+                    }
+                    */
+                    return triangles;
+                }
+            }
+        }
+
+
 
         [KSPField]
         public string floatNodeKey = "f";
@@ -375,24 +640,34 @@ namespace PWBFloatNode
         public string nodePatternKey = "p";
         [KSPField]
         public string topNodeSizeKey = "t";
-
+        [KSPField]
+        public string BottomNodeSizeKey = "b";
 
         [KSPField(isPersistant = true)]
         public int nodePattern = -1; // Note that the value -1 is a special case. In this case the maximum number of attachment nodes will be created, but be placed so far away as to be unusable. They need to be present so they can be used by the loading code.
 
         [KSPField(isPersistant = true)]
-        public int topTBNR = 1; 
+        public int topTBNR = 1;
 
+        [KSPField(isPersistant = true)]
+        public int bottomTBNR = 1; 
+
+        private double[] mountingPlateBasesShape; // An array of radii that descibes the shape at the base of the mounting plate. This is generated by the method BuildMountingPlateBaseShape()
+        private int sides; // The number of sides that the mounting plate and fairing will be made up from. Note that this value represents the size of the mountingPlateBasesShape array.
+        private double maxBasePlateRadius; // This is the largest value in the array mountingPlateBaseShape
         private List<NodePattern> nodePatternList; // list of procedurally created AttachNodes
-
         private List<TempNodeIcon> tempIcons; // a list of the icons that are used to temporarly display the attachment nodes while the node pattern is being changed
-
         private String nodeIDRoot = "PWBProcNode";
         private int maxProceduralNodes = 20; // THis needs to be the largest number of procedural nodes that are possible.
+        private List<TopBottomRadiusAndNode> tbrnList; // List of radii and attachment node sizes to pick from for the top and bottom.
+        private double plateFullHeight = 0.1; // This is the distance between the top of the plate (that fits on the bottom of a fuel tank, and the bottom of a plate (that the engines attach to.) 
+        private double flangeHeight = 0.1; // This will not change,m but is shared by both the baseplate and the fairing, so keepmit here.
 
-        private List<TopBottomRadiusAndNode> tbrnList;
-
-        private double fullHeight = 0.1; // This is the distance between the top of the plate (that fits on the bottom of a fuel tank, and the bottom of a plate (that the engines attach to.) 
+        private double plateSideBottomY=0; // This is the Y component of the bottom of the side of the moungting plate (ie the level of tht top of the flange
+        private double plateBottomY = -0.1; // This is the Y component of the bottom of the plate
+        [KSPField(isPersistant = true)]
+        private double fairingBaseY=-0.1; // this is the Y component of the base of the fairing (and should match the Y component of the float node)
+        private double floatNodeY = 0; // TODO what is the best initial value for this?
 
         private OSD osd;
         /// <summary>
@@ -491,7 +766,7 @@ namespace PWBFloatNode
                 Debug.Log("OnLoad()");
                 Debug.Log(TraceConfigNode(node));
 
-                this.BuildMountingPlateMesh();
+                this.BuildPlateAndFairing();
 
                 // Now we need to recreate the pattern of procedural attachement nodes based on the config.
                 this.CreateProceduralNodes();
@@ -550,6 +825,10 @@ namespace PWBFloatNode
                     {
                         OnTopNodeSizeKey();
                     }
+                    else if (Input.GetKey(BottomNodeSizeKey))
+                    {
+                        OnBottomNodeSizeKey();
+                    }
 
                 }
             }
@@ -576,7 +855,7 @@ namespace PWBFloatNode
 
             // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
             // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
-            BuildMountingPlateMesh();
+            BuildPlateAndFairing();
 
             // Add new procedural nodes in a new pattern or move existing ones
             CreateProceduralNodes();
@@ -602,7 +881,7 @@ namespace PWBFloatNode
 
             // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
             // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
-            BuildMountingPlateMesh();
+            BuildPlateAndFairing();
 
             // Add new procedural nodes in a new pattern or move existing ones
             CreateProceduralNodes();
@@ -612,9 +891,23 @@ namespace PWBFloatNode
 
         }
 
+        private void OnBottomNodeSizeKey()
+        {
 
+            // Change the TBNR
+            this.bottomTBNR = (this.bottomTBNR + 1) % this.tbrnList.Count;
 
+            // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
+            // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
+            BuildPlateAndFairing();
 
+            // Add new procedural nodes in a new pattern or move existing ones
+            CreateProceduralNodes();
+
+            // Create the icons that display the positions of the procedural attachment nodes.
+            CreateTempNodeIcons();
+
+        }
 
         private void CreateTempNodeIcons()
         {
@@ -764,7 +1057,7 @@ namespace PWBFloatNode
                 newNode = this.CopyNode(attachNode);
             }
 
-            newNode.position = new Vector3(x, (float)-this.fullHeight, z);
+            newNode.position = new Vector3(x, (float)-this.plateFullHeight, z);
             newNode.position = newNode.position * (part.rescaleFactor * part.scaleFactor);
             newNode.orientation = new Vector3(0, -1, 0);
             newNode.originalPosition = newNode.position;
@@ -869,13 +1162,13 @@ namespace PWBFloatNode
         {
             if (part.isConnected)
             {
-                Debug.Log("Part is connected");
+                //Debug.Log("Part is connected");
                 foreach (AttachNode node in this.part.attachNodes)
                 {
-                    Debug.Log("considering a node: " + node.id);
+                    //Debug.Log("considering a node: " + node.id);
                     if (AttachNode.NodeType.Stack == node.nodeType)
                     {
-                        Debug.Log("found a stack node");
+                        //Debug.Log("found a stack node");
                         // This is a stack node - it might be top or bottom.
                         // only consider standard anmed top and bottom nodes
                         if (node.id == "bottom" || node.id == "top")
@@ -887,13 +1180,14 @@ namespace PWBFloatNode
                                 normal.Normalize();
                                 float maxd = ProcessParts(part, null, normal);
 
-                                Debug.Log("maxd: " + maxd);
+                                //Debug.Log("maxd: " + maxd);
 
                                 // Now that we know how far along the normal the attach node needs to be we can place it
                                 if (0 < maxd)
                                 {
                                     Debug.Log("node.position: " + node.position);
-                                    node.position = normal * maxd * -1.0f; // TODO quick multiply by -1.0 here to make things work, but this needs lots of new thought now that the basepalte is being made procedural
+                                    node.position = normal * maxd * -1.0f; // TODO quick multiply by -1.0 here to make things work, but this needs lots of new thought now that the baseplate is being made procedural
+                                    this.floatNodeY = node.position.y /(this.part.scaleFactor*this.part.rescaleFactor) ; // We will be building the meshes assuming that the scaling is all set to 1. Since the lowest point in the other parts in in the final scaling, we need to divide through to get the unscaled lowest point. 
                                     Debug.Log("new node.position: " + node.position);
                                 }
                             }
@@ -901,9 +1195,15 @@ namespace PWBFloatNode
                     }
                 }
 
-                // Since we have potentially moved the float node, display the current node positions
+                // Now rebuild the mesh for the mounting plate. Note that this might takea long time, so we need to consider if we want to do this here, or if we want to do it in some other place that marks confirmation that the attachment node pattern has been accepted (when the mouseover is removed, or similar)
+                // Note that it is in doing this that the plateHeight is calculated, which is needed to position the atachment nodes.
+                BuildPlateAndFairing();
+
+                // Add new procedural nodes in a new pattern or move existing ones
+                CreateProceduralNodes();
+
+                // Create the icons that display the positions of the procedural attachment nodes.
                 CreateTempNodeIcons();
-                    
             }
         }
 
@@ -917,19 +1217,19 @@ namespace PWBFloatNode
             {
                 refferingPartID = refferingPart.ConstructID;
             }
-            Debug.Log("refferingPart : " + refferingPartID);
-            Debug.Log("processing the children of: " + _part.ConstructID);
+            //Debug.Log("refferingPart : " + refferingPartID);
+            //Debug.Log("processing the children of: " + _part.ConstructID);
 
             foreach (Part _childPart in _part.children)
             {
                 if (_childPart.ConstructID != refferingPartID) // ensure that the child is not the reffering part
                 {
-                    Debug.Log("considering a child part: " + _childPart.ConstructID);
+                    //Debug.Log("considering a child part: " + _childPart.ConstructID);
                     AttachNode node = _part.findAttachNodeByPart(_childPart);
 
                     if (node == null)
                     {
-                        Debug.Log("No attach point - the child part must be surface mounted");
+                        //Debug.Log("No attach point - the child part must be surface mounted");
                         float d = ProcessPart(_childPart, _part, normal);
                         if (d > maxd) { maxd = d; }
                     }
@@ -937,12 +1237,12 @@ namespace PWBFloatNode
                     {
                         if (AttachNode.NodeType.Stack == node.nodeType && refferingPart == null && !IsNodeProcedural(node)) // if the part is stack mounted and the reffering part of null and we did nit create the attachment node then this must be connected to the stack of our own part.
                         {
-                            Debug.Log("Not considering this part as it is stack mounted to the orginal part via a node other than one created by this plugin");
+                            //Debug.Log("Not considering this part as it is stack mounted to the orginal part via a node other than one created by this plugin");
                         }
                         else
                         {
                             float d = ProcessPart(_childPart, _part, normal);
-                            Debug.Log("d = " + d);
+                            //Debug.Log("d = " + d);
                             if (d > maxd) { maxd = d; }
                         }
                     }
@@ -952,14 +1252,14 @@ namespace PWBFloatNode
             // Also consider the parent
             if (_part.parent != null)
             {
-                Debug.Log("considering the parent part: " + _part.parent.ConstructID);
+                //Debug.Log("considering the parent part: " + _part.parent.ConstructID);
                 if (_part.parent.ConstructID != refferingPartID)
                 {
                     AttachNode node = _part.findAttachNodeByPart(_part.parent);
 
                     if (node == null)
                     {
-                        Debug.Log("No attach point - the parent part must be surface mounted");
+                        //Debug.Log("No attach point - the parent part must be surface mounted");
                         float d = ProcessPart(_part.parent, _part, normal);
                         if (d > maxd) { maxd = d; }
                     }
@@ -967,7 +1267,7 @@ namespace PWBFloatNode
                     {
                         if (AttachNode.NodeType.Stack == node.nodeType && refferingPart == null && !IsNodeProcedural(node)) // if the part is stack mounted and the reffering part of null then this must be connected to the stack of our wn part.
                         {
-                            Debug.Log("Not considering this part as it is stack mounted to the orginal part.");
+                            //Debug.Log("Not considering this part as it is stack mounted to the orginal part.");
                         }
                         else
                         {
@@ -979,25 +1279,25 @@ namespace PWBFloatNode
                 }
                 else
                 {
-                    Debug.Log("parent part is the reffering part, so it will not be consdered.");
+                    //Debug.Log("parent part is the reffering part, so it will not be consdered.");
                 }
             }
 
-            Debug.Log("Leaving ProcessParts, maxd:" + maxd);
+            //Debug.Log("Leaving ProcessParts, maxd:" + maxd);
             
             return (maxd);
         }
 
         private float ProcessPart(Part _part, Part refferingPart ,Vector3 normal)
         {
-            Debug.Log("Entering ProcessPart. part:" + _part.name + " constructID: " + _part.ConstructID);
+            //Debug.Log("Entering ProcessPart. part:" + _part.name + " constructID: " + _part.ConstructID);
             float maxd = 0;
             // What is the Normal to the plane? 
 //            Vector3 normal = part.transform.rotation * Vector3.up;
             Vector3 pointInPlane = part.transform.localToWorldMatrix.MultiplyPoint3x4(Vector3.zero); // use origin as the point in the plane
 
-            Debug.Log("Normal: " + normal);
-            Debug.Log("pointInPlane: " + pointInPlane);
+            //Debug.Log("Normal: " + normal);
+            //Debug.Log("pointInPlane: " + pointInPlane);
             // go through all the verticies in the collider mesh of the part and find out the one that is furthest away from the plane.
 
             MeshCollider mc = _part.collider as MeshCollider;
@@ -1005,11 +1305,11 @@ namespace PWBFloatNode
 
             if (mc)
             {
-                Debug.Log("This part has a mesh collider");
+                //Debug.Log("This part has a mesh collider");
                 foreach (Vector3 v in mc.sharedMesh.vertices)
                 {
                     Vector3 vInWorld = mc.transform.localToWorldMatrix.MultiplyPoint3x4(v);
-                    Debug.Log("Considering vertex: " + vInWorld.ToString());
+                    //Debug.Log("Considering vertex: " + vInWorld.ToString());
                     float d = GetVertixDistanceFromPlane(vInWorld, normal, pointInPlane);
                     if (d > maxd)
                     {
@@ -1020,12 +1320,12 @@ namespace PWBFloatNode
             else if (bc)
             {
                 // TODO support box colliders (whatever they are!)
-                Debug.LogError("Box collider: center: " + bc.center.ToString() + " size: " + bc.size.ToString());
+                //Debug.LogError("Box collider: center: " + bc.center.ToString() + " size: " + bc.size.ToString());
                 float d = bc.center.y - bc.size.y;
 
                 if (d > maxd)
                 {
-                    Debug.Log("d: " +d);
+                    //Debug.Log("d: " +d);
                     maxd = d;
                 }
             }
@@ -1043,7 +1343,7 @@ namespace PWBFloatNode
                 if(d>maxd) { maxd = d;}
             }
 
-            Debug.Log("Leaving ProcessPart. part: " + _part.name + " maxd: " + maxd);
+            //Debug.Log("Leaving ProcessPart. part: " + _part.name + " maxd: " + maxd);
 
             return (maxd);
         }
@@ -1217,7 +1517,56 @@ namespace PWBFloatNode
             Debug.Log(logData);
         }
 
-        private void BuildMountingPlateMesh()
+        // This method will generate an array of radii that describe the shape of the base of the moutning plate (also the top of the fairing). it is needed to build both the mounting plate and the fairing.
+        private double BuildMountingPlateBaseShape()
+        {
+            // First do some sanity checking
+            if (this.nodePattern < 0) { this.nodePattern = 0; } // This might occur if the user changes the top size before choosing a node pattern.
+
+            double topRadius = this.tbrnList[this.topTBNR].radius;
+
+            // Make some decisions - how many faces
+            this.sides = 60; // TODO we need to be MUCH smarter about this!
+
+            // Create the array
+            this.mountingPlateBasesShape = new double[this.sides];
+            
+            double maxCrossSectionRadius = topRadius;
+
+            for (int sideCounter = 0; sideCounter < sides; sideCounter++)
+            {
+                double crossSectionRadius = topRadius;
+                double crossSectionAngle = ((double)sideCounter / (double)sides) * (Math.PI * 2);
+
+                foreach (NodeRing ring in this.nodePatternList[this.nodePattern].rings)
+                {
+                    for (int counter2 = 0; counter2 < ring.nodeCount; counter2++)
+                    {
+                        double ringAngle = (Math.PI * 2 * ((double)counter2 / (double)ring.nodeCount)) + (double)ring.offsetAngle;
+                        double theta = crossSectionAngle - ringAngle;
+                        //Debug.Log("theta:" + theta);
+                        double result = GetMaxDistanceFromPlateCentre(theta, ring.radius, ring.nodeRadius);
+                        if (!double.IsNaN(result))
+                        {
+                            if (result > crossSectionRadius)
+                            {
+                                crossSectionRadius = result;
+                            }
+                            crossSectionRadius = Math.Max(crossSectionRadius, result);
+                        }
+                    }
+                }
+
+                this.mountingPlateBasesShape[sideCounter] = crossSectionRadius;
+                maxCrossSectionRadius = Math.Max(maxCrossSectionRadius, crossSectionRadius);
+
+                // TODO remove debugging
+                //Debug.Log("mountingplateBasesShape[" + sideCounter + "]=" + crossSectionRadius.ToString("F3"));
+            }
+            return (maxCrossSectionRadius);
+        }
+
+        private void BuildPlateAndFairing()
         {
             // TODO remove debugging
             // Debug.Log("scaleFactor:" + part.scaleFactor + " RescaleFactor:" + part.rescaleFactor);
@@ -1225,9 +1574,24 @@ namespace PWBFloatNode
             // First do some sanity checking
             if (this.nodePattern < 0) { this.nodePattern = 0; } // This might occur if the user changes the top size before choosing a node pattern.
 
-            double radius = this.tbrnList[this.topTBNR].radius;
+            // Build the shape at the base of the mounting plate. This will also be used bu the fairing
+            this.maxBasePlateRadius = this.BuildMountingPlateBaseShape();
 
-            MeshFilter mf = part.FindModelComponent<MeshFilter>("PWBProceduralEngineHousing");
+            // Build the mounting plate mesh
+            this.BuildMountingPlateMesh();
+
+            // Build the fairing mesh
+            this.BuildFairingMesh();
+        }
+
+        private void BuildMountingPlateMesh()
+        {
+            // Make some decisions - how many levels etc
+            int levels = 2;  // This represents how many rows of vertices the shaped side walls of the base will be.
+            double topRadius = this.tbrnList[this.topTBNR].radius;
+
+            // Get hold of the mesh so we can edit it,
+            MeshFilter mf = part.FindModelComponent<MeshFilter>("model");
             if (!mf) { Debug.LogError("[PWB FloatNode] no model for the engine mounting1", part); return; }
 
             // Sort out the rotations and position so that the mesh matches the part.
@@ -1237,145 +1601,263 @@ namespace PWBFloatNode
             Mesh m = mf.mesh;
             if (!m) { Debug.LogError("[PWB FloatNode] no model for the engine mounting2", part); return; }
 
-            // Make some decisions - how many faces, levels etc
-            int sides = 60; // TODO we need to be MUCH smarter about this!
-            int levels = 2; // TODO we will need to increase this if we add a bezier curve to the profile shape.
-
-            double maxCrossSectionRadius = radius;
-            double flangeHeight = 0.1;
-
-            double[] shape = new double[sides]; // an array of values representing the radius at the various vertices at the base of the model.
             PlateBuilder builder; // This will be created later once we know all the information needed to pass into its constructor
 
-            // First locate all the vertices.
+            double sideHeight = Math.Max(maxBasePlateRadius - topRadius, 0);// TODO Add a multiple in here so we can determine the slope
+            this.plateSideBottomY = -sideHeight;
+            this.plateFullHeight = sideHeight + flangeHeight;
+            this.plateBottomY = -plateFullHeight;
+            // Now that we know how high the sides are going to do, we can make a  decision about how many levels we will need.
+            if (0.0 == sideHeight)
             {
+                levels = 0; // If the side height is zero, we do not need any levels, the part will be made up of just the flange.
+            }
+            else
+            {
+                levels = (int)(Math.Ceiling(sideHeight / 0.1)) + 1;
+            }
+
+            // TODO remove debugging
+            Debug.Log("radius:" + topRadius + "\nmaxCrossSectionRadius:" + this.maxBasePlateRadius + "\nsideHeight:" + sideHeight + "\nflangeHeight:" + flangeHeight + "\nthis.plateFullHeight:" + this.plateFullHeight + "\nlevels:" + levels + "\nsides:" + sides);
+
+            // We now know everything we need to know to allocate the builder.
+            builder = new PlateBuilder(sides, levels);
+
+            // The top plate
+            {
+                // The central vertex in the center of the plate
+                builder.SetTop(Vector3d.zero, new Vector2(0.25f, 0.75f));
+
+                // the ring of outside vertices at the top.
+                // TODO debug remove
+                Debug.Log("setting out the top ring of vertices");
+                for (int counter1 = 0; counter1 < sides; counter1++)
+                {
+                    double angle = ((double)counter1 / (double)sides) * (2 * Math.PI);
+                    Vector3 vertex = new Vector3((float)(Math.Sin(angle) * topRadius), 0, (float)(Math.Cos(angle) * topRadius));
+                    Vector2 uvTop = new Vector2(0.25f + (float)(Math.Sin(angle) * 0.2), 0.75f + (float)(Math.Cos(angle) * 0.2));
+                    builder.SetTopEdge(counter1, vertex, uvTop);
+                }
+            }
+
+            // Now do the sides
+            if (levels > 0) // If levels was set to 0 because there are not sides then we need  not do any of this.
+            {
+                // First thing to do constructing the sides is to set up an array for Bezier curves that represent the profile through the plate at various angles. Hence the co-ordinates for each curve are not x&y but height&radius.
+                BezierCurve[] curves = new BezierCurve[sides];
                 for (int counter = 0; counter < sides; counter++)
                 {
-                    double crossSectionRadius = radius;
-                    double crossSectionAngle = ((double)counter / (double)sides) * (Math.PI * 2);
+                    Vector2 startPoint = new Vector2((float)topRadius, 0.0f);
+                    Vector2 startControl = new Vector2((float)topRadius, (float)plateSideBottomY * 0.5f);
+                    Vector2 endControl = new Vector2((float)this.mountingPlateBasesShape[counter], (float)plateSideBottomY * 0.5f);
+                    Vector2 endPoint = new Vector2((float)this.mountingPlateBasesShape[counter], (float)plateSideBottomY);
 
-                    foreach (NodeRing ring in this.nodePatternList[this.nodePattern].rings)
-                    {
-                        for (int counter2 = 0; counter2 < ring.nodeCount; counter2++)
-                        {
-                            double ringAngle = (Math.PI * 2 * ((double)counter2 / (double)ring.nodeCount)) + (double)ring.offsetAngle;
-                            double theta = crossSectionAngle - ringAngle;
-                            Debug.Log("theta:" + theta);
-                            double result = GetMaxDistanceFromPlateCentre(theta, ring.radius, ring.nodeRadius);
-                            if (!double.IsNaN(result))
-                            {
-                                if (result > crossSectionRadius)
-                                {
-                                    crossSectionRadius = result;
-                                }
-                                crossSectionRadius = Math.Max(crossSectionRadius, result);
-                            }
-                        }
-                    }
-
-                    shape[counter] = crossSectionRadius;
-                    maxCrossSectionRadius = Math.Max(maxCrossSectionRadius, crossSectionRadius);
-
-                    // TODO remove debugging
-                    Debug.Log("shape[" + counter + "]=" + crossSectionRadius.ToString("F3"));
+                    curves[counter] = new BezierCurve(startPoint, startControl, endControl, endPoint);
                 }
 
-                double sideHeight = Math.Max(maxCrossSectionRadius - radius, 0);// TODO Add a multiple in here so we can determine the slope
-                this.fullHeight = sideHeight + flangeHeight;
-
-                // Now that we know how high the sides are going to do, we can make a  decision about how many levels we will need.
-                if (0.0 == sideHeight)
+                // Now we can use the Bezier Curves to generate the vertices for the sides. Hopefully we will get nice smooth curves (lovely).
+                for (int levelCounter = 0; levelCounter < levels; levelCounter++)
                 {
-                    levels = 0; // If the side height is zero, we do not need any levels, the part will be made up of just the flange.
+                    float i = (float)levelCounter / ((float)levels - 1f);
+
+                    for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
+                    {
+                        Vector2 pointInCurve = curves[sideCounter % sides].PointInCurve(i); // This gets height / radius co-ordinates
+
+                        double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                        Vector3 vertex = new Vector3((float)(Math.Sin(angle) * pointInCurve.x), pointInCurve.y, (float)(Math.Cos(angle) * pointInCurve.x));
+                        Vector2 uvEdge = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), Mathf.Lerp(0.05f, 0.45f, i));
+                        builder.SetLevelEdge(sideCounter, levelCounter, vertex, uvEdge);
+                    }
+                }
+            }
+
+            // Create the flange under the sides.
+            for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
+            {
+                double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                Vector3 vertexTop = new Vector3((float)(Math.Sin(angle) * this.mountingPlateBasesShape[sideCounter % sides]), (float)-sideHeight, (float)(Math.Cos(angle) * this.mountingPlateBasesShape[sideCounter % sides]));
+                Vector2 uvTop = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.45f);
+                builder.SetFlangeTop(sideCounter, vertexTop, uvTop);
+
+                Vector3 vertexBottom = new Vector3((float)(Math.Sin(angle) * this.mountingPlateBasesShape[sideCounter % sides]), (float)-this.plateFullHeight, (float)(Math.Cos(angle) * this.mountingPlateBasesShape[sideCounter % sides]));
+                Vector2 uvBottom = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.05f);
+                builder.SetFlangeBottom(sideCounter, vertexBottom, uvBottom);
+            }
+
+            // the ring of outside vertices at the bottom.
+            // TODO debug remove
+            Debug.Log("setting out the bottom ring of vertices");
+
+            {
+                for (int sideCounter = 0; sideCounter < sides; sideCounter++)
+                {
+                    double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                    Vector3 vertex = new Vector3((float)(Math.Sin(angle) * this.mountingPlateBasesShape[sideCounter % sides]), (float)-this.plateFullHeight, (float)(Math.Cos(angle) * this.mountingPlateBasesShape[sideCounter % sides]));
+                    Vector2 uvBottom = new Vector2(0.75f + (float)(Math.Sin(angle) * 0.2), 0.75f + (float)(Math.Cos(angle) * 0.2));
+                    builder.SetBottomEdge(sideCounter, vertex, uvBottom);
+                }
+
+                // Set up the bottom centre vertex.
+                builder.SetBottom(new Vector3(0, (float)-this.plateFullHeight, 0), new Vector2(0.75f, 0.75f));
+            }
+
+            // Now set up all the vertices triangles etc into the mesh
+            {
+                m.Clear();
+                m.vertices = builder.vertices;
+                m.normals = new Vector3[m.vertexCount];
+                m.triangles = builder.triangles;
+                m.uv = builder.uv;
+                m.RecalculateNormals();
+                calculateMeshTangents(m);
+                
+                // TODO does this work?
+                // calculateMeshTangents(m); // Attempt to calculate mesh tangents
+
+                // TODO is it a good idea optimize in the editor - does it cause a performance problem?
+                //if (!HighLogic.LoadedSceneIsEditor) m.Optimize();
+                m.Optimize();
+            }
+
+            // Finally set the collider mesh to use this new mesh
+            {
+                MeshCollider mc = part.collider as MeshCollider;
+
+                if (null == mc)
+                {
+                    Debug.LogError("Failed to access the mesh collider");
                 }
                 else
                 {
-                    levels = (int)(Math.Ceiling(sideHeight / 0.1)) + 1;
+                    mc.sharedMesh = null;
+                    mc.sharedMesh = m;
+                }
+            }
+        }
+
+        // This function builds the mesh and collision mesh for the fairing.
+        private void BuildFairingMesh()
+        {
+            // Make some decisions - how many levels etc
+            int levels = 2;  // This represents how many rows of vertices the shaped side walls of the base will be.
+
+            double bottomRadius = this.tbrnList[this.bottomTBNR].radius;
+
+            this.fairingBaseY = Math.Min(this.floatNodeY, this.plateBottomY); // If the floatnode is in a silly location (ie above the bottom of the plate) then correct for this.
+
+            Debug.Log("fairingBaseY: " + this.fairingBaseY + "\nfloatNodeY: " + this.floatNodeY + "\nthis.plateBottomY: " + this.plateBottomY + "\nthis.plateSideBottomY: " + this.plateSideBottomY);
+
+            // Get hold of the mesh so we can edit it,
+            MeshFilter mf = part.FindModelComponent<MeshFilter>("fairing");
+            if (!mf) { Debug.LogError("[PWB Procedural Engine Housing] no model for the fairing1", part); return; }
+
+            // Sort out the rotations and position so that the mesh matches the part.
+            mf.transform.position = part.transform.position;
+            mf.transform.rotation = part.transform.rotation;
+
+            Mesh m = mf.mesh;
+            if (!m) { Debug.LogError("[PWB Procedural Engine Housing] no model for the fairing2", part); return; }
+
+            FairingBuilder builder; // This will be created later once we know all the information needed to pass into its constructor
+
+            // Work out a few height related things first
+            float fairingTopPoint = (float)this.plateBottomY + (float)this.flangeHeight;
+            float fairingSideTop = (float)this.plateBottomY;
+            float fairingSideBottom = (float)this.fairingBaseY;
+            float fairingBottomPoint = (float)this.fairingBaseY - 0.1f;
+
+            Debug.Log("fairingTopPoint:" + fairingTopPoint + "\nfairingSideTop:" + fairingSideTop + "\nfairingSideBottom:" + fairingSideBottom + "\nfairingBottomPoint:" + fairingBottomPoint);
+
+            float fairingHeight = fairingSideTop - fairingSideBottom;
+            
+            levels = (int)(Math.Ceiling(fairingHeight / 0.1)) + 1;
+       
+            // TODO remove debugging
+            Debug.Log("bottomRadius:" + bottomRadius + "\nmaxBasePlateRadius:" + this.maxBasePlateRadius + "\nfairingHeight:" + fairingHeight  + "\nlevels:" + levels + "\nsides:" + this.sides);
+
+            // We now know everything we need to know to allocate the builder.
+            builder = new FairingBuilder(sides, levels);
+      
+            // First do the top edge
+            Debug.Log("top edge");            
+            for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
+            {
+                double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                Vector3 vertex = new Vector3((float)(Math.Sin(angle) * this.mountingPlateBasesShape[sideCounter % sides]), fairingTopPoint, (float)(Math.Cos(angle) * this.mountingPlateBasesShape[sideCounter % sides]));
+                Vector2 uvInsideTop = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.45f); // TODO
+                Vector2 uvOutsideTop = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.45f); // TODO
+
+                builder.SetInsideTop(sideCounter, vertex, uvInsideTop);
+                builder.SetOutsideTop(sideCounter, vertex, uvOutsideTop);
+            }
+
+            // Next do the bottom edge
+            Debug.Log("bottom edge");
+            for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
+            {
+                double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                Vector3 vertex = new Vector3((float)(Math.Sin(angle) * bottomRadius), fairingBottomPoint, (float)(Math.Cos(angle) * bottomRadius));
+                Vector2 uvInsideBottom = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.05f); // TODO
+                Vector2 uvOutsideBottom = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.05f); // TODO
+
+                builder.SetInsideBottom(sideCounter, vertex, uvInsideBottom);
+                builder.SetOutsideBottom(sideCounter, vertex, uvOutsideBottom);
+            }
+
+            // Now do the sides
+            Debug.Log("sides");
+            if (levels > 0) // If levels was set to 0 because there are not sides then we need  not do any of this. // TODO consider what to do, and where do we set the number of levels.
+            {
+                // First thing to do constructing the sides is to set up an array for Bezier curves that represent the profile through the plate at various angles. Hence the co-ordinates for each curve are not x&y but height&radius.
+                BezierCurve[] insideCurves = new BezierCurve[sides];
+                BezierCurve[] outsideCurves = new BezierCurve[sides];
+
+                Debug.Log("curves");
+                for (int counter = 0; counter < sides; counter++)
+                {
+                    Vector2 insideStartPoint = new Vector2((float)this.mountingPlateBasesShape[counter], fairingSideTop);
+                    Vector2 insideStartControl = new Vector2((float)this.mountingPlateBasesShape[counter], fairingSideTop - (0.25f * (fairingHeight)));
+                    Vector2 insideEndControl = new Vector2((float)bottomRadius, fairingSideBottom + (0.25f * (fairingHeight)));
+                    Vector2 insideEndPoint = new Vector2((float)bottomRadius, fairingSideBottom);
+
+                    insideCurves[counter] = new BezierCurve(insideStartPoint, insideStartControl, insideEndControl, insideEndPoint);
+
+                    Vector2 outsideStartPoint = new Vector2((float)this.mountingPlateBasesShape[counter] + 0.05f, fairingSideTop);
+                    Vector2 outsideStartControl = new Vector2((float)this.mountingPlateBasesShape[counter] + 0.05f, fairingSideTop - (0.25f * (fairingHeight)));
+                    Vector2 outsideEndControl = new Vector2((float)bottomRadius + 0.05f, fairingSideBottom + (0.25f * (fairingHeight)));
+                    Vector2 outsideEndPoint = new Vector2((float)bottomRadius + 0.05f, fairingSideBottom);
+
+                    outsideCurves[counter] = new BezierCurve(outsideStartPoint, outsideStartControl, outsideEndControl, outsideEndPoint);
                 }
 
-                // TODO remove debugging
-                Debug.Log("radius:" + radius + "\nmaxCrossSectionRadius:" + maxCrossSectionRadius + "\nsideHeight:" + sideHeight + "\nflangeHeight:" + flangeHeight + "\nfullHeight:" + fullHeight + "\nlevels:" + levels + "\nsides:" + sides);
-
-                // We now know everything we need to know to allocate the builder.
-                builder = new PlateBuilder(sides, levels);
-
-                // The top plate
+                Debug.Log("points");
+                // Now we can use the Bezier Curves to generate the vertices for the sides. Hopefully we will get nice smooth curves (lovely).
+                for (int levelCounter = 0; levelCounter < levels; levelCounter++)
                 {
-                    // The central vertex in the center of the plate
-                    builder.SetTop(Vector3d.zero, new Vector2(0.25f, 0.75f));
+                    float i = (float)levelCounter / ((float)levels - 1f);
 
-                    // the ring of outside vertices at the top.
-                    // TODO debug remove
-                    Debug.Log("setting out the top ring of vertices");
-                    for (int counter1 = 0; counter1 < sides; counter1++)
+                    // Do the inside vertices
+                    for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
                     {
-                        double angle = ((double)counter1 / (double)sides) * (2 * Math.PI);
-                        Vector3 vertex = new Vector3((float)(Math.Sin(angle) * radius), 0, (float)(Math.Cos(angle) * radius));
-                        Vector2 uvTop = new Vector2(0.25f + (float)(Math.Sin(angle) * 0.2), 0.75f + (float)(Math.Cos(angle) * 0.2));
-                        builder.SetTopEdge(counter1, vertex, uvTop);
-                    }
-                }
+                        Vector2 pointInCurve = insideCurves[sideCounter % sides].PointInCurve(i); // This gets height / radius co-ordinates
 
-                // Now do the sides
-                if (levels > 0) // If levels was set to 0 because there are not sides then we need  not do any of this.
-                {
-                    // First thing to do constructing the sides is to set up an array for Bezier curves that represent the profile through the plate at various angles. Hence the co-ordinates for each curve are not x&y but height&radius.
-                    BezierCurve[] curves = new BezierCurve[sides];
-                    for (int counter = 0; counter < sides; counter++)
-                    {
-                        Vector2 startPoint = new Vector2((float)radius, 0.0f);
-                        Vector2 startControl = new Vector2((float)radius, -((float)sideHeight * 0.5f));
-                        Vector2 endControl = new Vector2((float)shape[counter], -((float)sideHeight * 0.5f));
-                        Vector2 endPoint = new Vector2((float)shape[counter], -(float)sideHeight);
-
-                        curves[counter] = new BezierCurve(startPoint, startControl, endControl, endPoint);
-                    }
-
-                    // Now we can use the Bezier Curves to generate the vertices for the sides. Hopefully we will get nice smooth curves (lovely).
-                    for (int levelCounter = 0; levelCounter < levels; levelCounter++)
-                    {
-                        float i = (float)levelCounter / ((float)levels - 1f);
-
-                        for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
-                        {
-                            Vector2 pointInCurve = curves[sideCounter % sides].PointInCurve(i); // This gets height / radius co-ordinates
-
-                            double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
-                            Vector3 vertex = new Vector3((float)(Math.Sin(angle) * pointInCurve.x), pointInCurve.y, (float)(Math.Cos(angle) * pointInCurve.x));
-                            Vector2 uvEdge = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), Mathf.Lerp(0.05f, 0.45f, i));
-                            builder.SetLevelEdge(sideCounter, levelCounter, vertex, uvEdge);
-                        }
-                    }
-                }
-
-                // Create the flange under the sides.
-                for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
-                {
-                    double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
-                    Vector3 vertexTop = new Vector3((float)(Math.Sin(angle) * shape[sideCounter % sides]), (float)-sideHeight, (float)(Math.Cos(angle) * shape[sideCounter % sides]));
-                    Vector2 uvTop = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.45f);
-                    builder.SetFlangeTop(sideCounter, vertexTop, uvTop);
-
-                    Vector3 vertexBottom = new Vector3((float)(Math.Sin(angle) * shape[sideCounter % sides]), (float)-fullHeight, (float)(Math.Cos(angle) * shape[sideCounter % sides]));
-                    Vector2 uvBottom = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), 0.05f);
-                    builder.SetFlangeBottom(sideCounter, vertexBottom, uvBottom);
-                }
-
-                // the ring of outside vertices at the bottom.
-                // TODO debug remove
-                Debug.Log("setting out the bottom ring of vertices");
-
-                {
-                    for (int sideCounter = 0; sideCounter < sides; sideCounter++)
-                    {
                         double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
-                        Vector3 vertex = new Vector3((float)(Math.Sin(angle) * shape[sideCounter % sides]), (float)-this.fullHeight, (float)(Math.Cos(angle) * shape[sideCounter % sides]));
-                        Vector2 uvBottom = new Vector2(0.75f + (float)(Math.Sin(angle) * 0.2), 0.75f + (float)(Math.Cos(angle) * 0.2));
-                        builder.SetBottomEdge(sideCounter, vertex, uvBottom);
+                        Vector3 vertex = new Vector3((float)(Math.Sin(angle) * pointInCurve.x), pointInCurve.y, (float)(Math.Cos(angle) * pointInCurve.x));
+                        Vector2 uvEdge = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), Mathf.Lerp(0.05f, 0.45f, i)); // TODO sort this lot out!
+                        builder.SetInsideLevel(sideCounter, levelCounter, vertex, uvEdge);
                     }
 
-                    // Set up the bottom centre vertex.
-                    builder.SetBottom(new Vector3(0, (float)-fullHeight, 0), new Vector2(0.75f, 0.75f));
+                    // Now do the outside vertices
+                    for (int sideCounter = 0; sideCounter < sides + 1; sideCounter++)
+                    {
+                        Vector2 pointInCurve = outsideCurves[sideCounter % sides].PointInCurve(i); // This gets height / radius co-ordinates
+
+                        double angle = ((double)sideCounter / (double)sides) * (2 * Math.PI);
+                        Vector3 vertex = new Vector3((float)(Math.Sin(angle) * pointInCurve.x), pointInCurve.y, (float)(Math.Cos(angle) * pointInCurve.x));
+                        Vector2 uvEdge = new Vector2(0.05f + ((0.9f * (float)sideCounter) / (float)sides), Mathf.Lerp(0.05f, 0.45f, i)); // TODO sort this lot out!
+                        builder.SetOutsideLevel(sideCounter, levelCounter, vertex, uvEdge);
+                    }
                 }
             }
 
@@ -1387,14 +1869,14 @@ namespace PWBFloatNode
                 m.triangles = builder.triangles;
                 m.uv = builder.uv;
                 m.RecalculateNormals();
-                m.tangents = new Vector4[m.vertexCount];
+                calculateMeshTangents(m);
 
                 // TODO is it a good idea optimize in the editor - does it cause a performance problem?
                 //if (!HighLogic.LoadedSceneIsEditor) m.Optimize();
-                //m.Optimize();
+                m.Optimize();
             }
 
-            // Finally set the collider mesh to use this new mesh
+            // Finally set the collider mesh to use this new mesh  TODO what do we need to do here?
             {
                 MeshCollider mc = part.collider as MeshCollider;
 
@@ -1438,6 +1920,67 @@ namespace PWBFloatNode
 
             return result;
         }
+
+        // code borrowed from http://answers.unity3d.com/questions/7789/calculating-tangents-vector4.html to recalculate thte tangents for the mesh
+        public static void calculateMeshTangents(Mesh mesh)
+        {
+            //speed up math by copying the mesh arrays    
+            int[] triangles = mesh.triangles;
+            Vector3[] vertices = mesh.vertices;
+            Vector2[] uv = mesh.uv;
+            Vector3[] normals = mesh.normals;
+            //variable definitions
+            int triangleCount = triangles.Length;
+            int vertexCount = vertices.Length;
+            Vector3[] tan1 = new Vector3[vertexCount];
+            Vector3[] tan2 = new Vector3[vertexCount];
+            Vector4[] tangents = new Vector4[vertexCount];
+            for (long a = 0; a < triangleCount; a += 3)
+            {
+                long i1 = triangles[a + 0];
+                long i2 = triangles[a + 1];
+                long i3 = triangles[a + 2];
+                Vector3 v1 = vertices[i1];
+                Vector3 v2 = vertices[i2];
+                Vector3 v3 = vertices[i3];
+                Vector2 w1 = uv[i1];
+                Vector2 w2 = uv[i2];
+                Vector2 w3 = uv[i3];
+                float x1 = v2.x - v1.x;
+                float x2 = v3.x - v1.x;
+                float y1 = v2.y - v1.y;
+                float y2 = v3.y - v1.y;
+                float z1 = v2.z - v1.z;
+                float z2 = v3.z - v1.z;
+                float s1 = w2.x - w1.x;
+                float s2 = w3.x - w1.x;
+                float t1 = w2.y - w1.y;
+                float t2 = w3.y - w1.y;
+                float r = 1.0f / (s1 * t2 - s2 * t1);
+                Vector3 sdir = new Vector3((t2 * x1 - t1 * x2) * r, (t2 * y1 - t1 * y2) * r, (t2 * z1 - t1 * z2) * r);
+                Vector3 tdir = new Vector3((s1 * x2 - s2 * x1) * r, (s1 * y2 - s2 * y1) * r, (s1 * z2 - s2 * z1) * r);
+                tan1[i1] += sdir;
+                tan1[i2] += sdir;
+                tan1[i3] += sdir;
+                tan2[i1] += tdir;
+                tan2[i2] += tdir;
+                tan2[i3] += tdir;
+            }
+            for (long a = 0; a < vertexCount; ++a)
+            {
+                Vector3 n = normals[a];
+                Vector3 t = tan1[a];
+                //Vector3 tmp = (t - n * Vector3.Dot(n, t)).normalized;
+                //tangents[a] = new Vector4(tmp.x, tmp.y, tmp.z);
+                Vector3.OrthoNormalize(ref n, ref t);
+                tangents[a].x = t.x;
+                tangents[a].y = t.y;
+                tangents[a].z = t.z;
+                tangents[a].w = (Vector3.Dot(Vector3.Cross(n, t), tan2[a]) < 0.0f) ? -1.0f : 1.0f;
+            }
+            mesh.tangents = tangents;
+        }
+
     }
 
     // Utils - Borrowed from KSP Select Root Mod - credit where it is due
